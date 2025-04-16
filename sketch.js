@@ -1,61 +1,189 @@
+// Initialize PIXI Application
+console.log("Initializing PIXI Application");
+
+// Constants (will be moved to a separate file later)
+const SCENE_SPEED = 1.0;
+const TREE_SPACING = 500;
+const MAX_BRANCH_LEVELS = 4;
+const TRUNK_LENGTH = 250;
+const TRUNK_WIDTH = 40;
+const TRUNK_ANGLE_RANGE = 20;
+const MIN_SPAWN_INTERVAL = 2000;
+const BRANCH_COLOR = 0x9E958A;
+const LEAF_COLOR = 0x7C7F4A;
+const SKY_COLOR = 0x7AB9D4;
+
+// Create the PIXI Application
+const app = new PIXI.Application({
+    width: window.innerWidth,
+    height: 900, // Fixed height of 900px
+    backgroundColor: SKY_COLOR,
+    resolution: window.devicePixelRatio || 1,
+    autoDensity: true,
+    antialias: true
+});
+
+// In tests, canvasContainer may not exist
+const canvasContainer = document.getElementById('canvasContainer');
+if (canvasContainer) {
+    canvasContainer.appendChild(app.view);
+} else {
+    // During tests, just add it to the body or do nothing
+    if (document.body) {
+        document.body.appendChild(app.view);
+    }
+}
+console.log("PIXI Application initialized");
+
+// Global state
+let trees = [];
+let scrollX = 0;
+let lastTreeX = 0;
+let debugMode = false;
+let isPaused = false;
+let hasStarted = false;
+let lastSpawnTime = 0;
+let fpsBuffer = [];
+const FPS_BUFFER_SIZE = 30;
+
+// HTML elements
+let startBtn;
+let pauseBtn;
+let debugBtn;
+let fpsCounter;
+
+// Utility functions to replace p5.js functionality
+function random(min, max) {
+    if (max === undefined) {
+        max = min;
+        min = 0;
+    }
+    return min + Math.random() * (max - min);
+}
+
+function floor(value) {
+    return Math.floor(value);
+}
+
+function constrain(value, min, max) {
+    return Math.max(min, Math.min(max, value));
+}
+
+// Angle conversion
+const PI = Math.PI;
+function degrees(rad) { return rad * 180 / PI; }
+function radians(deg) { return deg * PI / 180; }
+
+// Text formatting
+function nf(num, left, right) {
+    return num.toFixed(right);
+}
+
+console.log("Utility functions defined");
+
+// Branch class
 class Branch {
     constructor(options) {
         this.x = options.x || 0;
         this.y = options.y || 0;
-        this.length = options.length || random(225, 375);
-        this.width = options.width || random(30, 45);
-        this.angle = options.angle || random(-20, 20) * PI/180;
         this.level = options.level || 0;
+        
+        // Use fixed values for trunk (level 0), except for angle
+        if (this.level === 0) {
+            this.length = TRUNK_LENGTH;
+            this.width = TRUNK_WIDTH;
+            this.angle = random(-TRUNK_ANGLE_RANGE, TRUNK_ANGLE_RANGE) * PI/180;
+        } else {
+            this.length = options.length || random(225, 375);
+            this.width = options.width || random(30, 45);
+            this.angle = options.angle || random(-20, 20) * PI/180;
+        }
+        
         this.growth = 0;
         this.children = [];
-        this.growthRate = (2 / (60 * 60)) * 4;
+        this.growthRate = (2 / (60 * 60)) * 4 * SCENE_SPEED;
         this.relativeHeight = options.relativeHeight || 0;
         this.side = options.side || 0;
-        this.colorVariation = options.colorVariation || 1.0; // Pass through color variation
+        
+        // Add flag to track if we've added a top branch (for level 0 only)
+        this.hasTopBranch = false;
+        
+        // Color variation: combine tree's variation with individual branch variation
+        const branchVariation = random(0.85, 1.15); // ±15% individual variation
+        this.colorVariation = (options.colorVariation || 1.0) * branchVariation;
         
         // Store level 0 width for leaf sizing
         this.level0Width = options.level0Width || this.width;
         
+        // Calculate and store position bias for this branch
+        this.randomBias = random(0.2, 2.0);
+        if (Math.sign(this.angle) !== this.side) {
+            this.randomBias *= 0.25;
+        }
+        
         // Leaf properties
-        this.numLeaves = floor(random(1, 3)); // 1 to 3 leaves
-        this.leafAppearGrowth = random(0.2, 0.9); // Appear between 30-50% growth
+        this.numLeaves = floor(random(1, 3));
+        this.leafAppearGrowth = random(0.2, 0.9);
         this.leaves = [];
         
         // Initialize leaves
         for (let i = 0; i < this.numLeaves; i++) {
             this.leaves.push({
-                size: 0.8, // Size relative to level 0 branch width
-                rotation: random(-1.22, 1.22) - 3.14159, // ±70 degrees in radians
-                growth: 0, // Individual leaf growth (0 to 1)
-                growthRate: 10 // Grows to full size in 0.5 seconds (1/0.5 = 2.0)
+                size: 0.45, // LEAF_SIZE
+                rotation: random(-1.22, 1.22) - 3.14159,
+                growth: 0,
+                growthRate: 0.01 * SCENE_SPEED, // Reduced for smoother growth
+                colorVariation: random(0.85, 1.15)
             });
         }
         
-        // Branch colors for different levels
-        this.levelColors = [
-            color(139, 69, 19),  // Level 0 - Brown
-            color(165, 42, 42),  // Level 1 - Brown-red
-            color(160, 82, 45),  // Level 2 - Sienna
-            color(205, 133, 63)  // Level 3 - Peru
-        ];
-        
         // Branch spawning properties
-        this.maxChildren = this.level === 0 ? floor(random(6, 13)) : floor(random(2, 5));
+        if (this.level === 0) {
+            this.maxChildren = floor(random(6, 13));
+        } else {
+            this.maxChildren = floor(random(2, 5));
+        }
+        
         this.childTriggers = [];
         
+        // Scale child trigger points
+        const minTrigger = 0.3;
+        const maxTrigger = 0.9;
+        const triggerRange = maxTrigger - minTrigger;
+        
         for (let i = 0; i < this.maxChildren; i++) {
-            this.childTriggers.push(random(0.3, 0.9));
+            // Distribute triggers more evenly across the growth range
+            const basePoint = minTrigger + (triggerRange * i / this.maxChildren);
+            const randomOffset = random(-0.1, 0.1) * triggerRange;
+            this.childTriggers.push(constrain(basePoint + randomOffset, minTrigger, maxTrigger));
         }
+        
+        // PIXI graphics object
+        this.graphics = new PIXI.Graphics();
+        
+        // Cache for branch vertices
+        this.cachedVertices = null;
+        this.isFullyGrown = false;
     }
 
     addChild() {
         const childLength = this.length * random(0.4, 0.7);
         const childWidth = this.width * 0.6;
         const childAngle = random(-1.22, 1.22);
-        const relativeHeight = random(0.5, 1);
+        let relativeHeight;
+        
+        // For the trunk (level 0), ensure at least one branch is at the top
+        if (this.level === 0 && !this.hasTopBranch && this.children.length === 0) {
+            // First branch on trunk - place at top
+            relativeHeight = 1.0;
+            this.hasTopBranch = true;
+        } else {
+            relativeHeight = random(0.5, 1);
+        }
+        
         const side = random() < 0.5 ? -1 : 1;
         
-        if (this.level < 3) {
+        if (this.level < MAX_BRANCH_LEVELS) {
             this.children.push(new Branch({
                 length: childLength,
                 width: childWidth,
@@ -64,12 +192,14 @@ class Branch {
                 side: side,
                 relativeHeight: relativeHeight,
                 level0Width: this.level0Width,
-                colorVariation: this.colorVariation // Pass color variation to children
+                colorVariation: this.colorVariation
             }));
         }
     }
 
     update() {
+        const wasFullyGrown = this.growth >= 1;
+        
         if (this.growth < 1) {
             this.growth += this.growthRate;
             this.growth = constrain(this.growth, 0, 1);
@@ -78,7 +208,7 @@ class Branch {
             if (this.growth >= this.leafAppearGrowth) {
                 for (let leaf of this.leaves) {
                     if (leaf.growth < 1) {
-                        leaf.growth += leaf.growthRate * this.growthRate;
+                        leaf.growth += leaf.growthRate;
                         leaf.growth = constrain(leaf.growth, 0, 1);
                     }
                 }
@@ -91,6 +221,15 @@ class Branch {
                     this.childTriggers.splice(i, 1);
                 }
             }
+            
+            // Clear cache if not fully grown
+            this.cachedVertices = null;
+        }
+        
+        // Check if just reached full growth
+        if (!wasFullyGrown && this.growth >= 1) {
+            this.isFullyGrown = true;
+            // Cache will be created on next draw
         }
         
         // Update all children
@@ -99,234 +238,320 @@ class Branch {
         }
     }
 
-    drawDebug(x, y, currentLength) {
-        if (!debugMode) return; // Only show debug visuals when debug mode is enabled
+    calculateBranchVertices(currentLength, currentWidth, topWidth) {
+        // Calculate curve heights - make bottom curve rounder
+        let bottomCurveHeight = currentWidth * 0.3; // Increased from 0.15 to 0.3 for rounder bottom
+        let topCurveHeight = topWidth * 0.5;
         
-        push();
-        noStroke();
-        fill(255, 0, 0);
-        ellipse(x, y, 8, 8);
-        
-        fill(0);
-        textSize(12);
-        textAlign(LEFT);
-        text(`Level: ${this.level}`, x + 10, y);
-        text(`Growth: ${nf(this.growth, 1, 2)}`, x + 10, y + 15);
-        pop();
+        return {
+            vertices: [
+                [-currentWidth/2, 0],              // Bottom left
+                [-topWidth/2, -currentLength],     // Top left
+                [topWidth/2, -currentLength],      // Top right
+                [currentWidth/2, 0]                // Bottom right
+            ],
+            controlPoints: [
+                // Top curve
+                [-topWidth/2, -currentLength - topCurveHeight],  // Left control point
+                [topWidth/2, -currentLength - topCurveHeight],   // Right control point
+                // Bottom curve - adjust control points for rounder connection
+                [currentWidth/2, bottomCurveHeight],            // Right control point
+                [-currentWidth/2, bottomCurveHeight]            // Left control point
+            ]
+        };
     }
 
-    drawLeaves() {
-        if (this.growth < this.leafAppearGrowth) return; // Don't draw leaves until they should appear
-        
-        push();
-        
-        // Initial positioning (same as draw())
-        if (this.level === 0) {
-            translate(this.x, this.y);
-            rotate(this.angle);
-        }
-
-        let currentLength = this.length * this.growth;
-        let currentWidth = this.width * this.growth;
-        
-        // Position at end of branch
-        translate(0, -currentLength);
-        
-        fill('#7C7F4A80'); // Added 80 for 50% transparency
-        noStroke();
-        
-        for (let leaf of this.leaves) {
-            push();
+    draw(container, parentX, parentY, parentAngle) {
+        try {
+            this.graphics.clear();
             
-            // Draw vesica piscis
-            let leafSize = this.level0Width * leaf.size * leaf.growth; // Scale by leaf growth
-            let width = leafSize;
-            let height = width * 1.2; // Reduced from 1.5 to 1.2 to make it broader
+            // Calculate current position
+            let currentX, currentY, currentAngle;
             
-            // Calculate control points for bezier curves
-            let cp1x = width * 0.4;  // Increased from 0.3 to 0.4 for broader shape
-            let cp1y = height * 0.15; // Reduced from 0.2 to 0.15 for broader shape
-            let cp2x = width * 0.4;  // Increased from 0.3 to 0.4 for broader shape
-            let cp2y = -height * 0.15; // Reduced from 0.2 to 0.15 for broader shape
+            if (parentX !== undefined && parentY !== undefined && parentAngle !== undefined) {
+                currentAngle = parentAngle + this.angle * this.side;
+                
+                // Calculate branch start position relative to parent
+                const parentLength = this.relativeHeight * this.length; // How far up the parent branch
+                const offsetX = Math.sin(parentAngle) * parentLength;
+                const offsetY = -Math.cos(parentAngle) * parentLength;
+                
+                // Calculate base offset using stored random bias
+                const baseOffset = (this.width/2) * 0.3;
+                const sideOffsetX = Math.cos(parentAngle) * this.side * baseOffset * this.randomBias;
+                const sideOffsetY = Math.sin(parentAngle) * this.side * baseOffset * this.randomBias;
+                
+                currentX = parentX + offsetX + sideOffsetX;
+                currentY = parentY + offsetY + sideOffsetY;
+            } else {
+                currentX = this.x;
+                currentY = this.y;
+                currentAngle = this.angle;
+            }
             
-            // Set rotation origin at pointed end of leaf
-            rotate(leaf.rotation); // Rotate around branch end point
-            translate(0, -height/2); // Move to pointed end
+            const currentLength = this.length * this.growth;
+            const currentWidth = this.width * this.growth;
+            const topWidth = currentWidth * 0.5;
             
-            // Draw vesica piscis shape using bezier curves
-            beginShape();
-            // Start at top point
-            vertex(0, -height/2);
-            // Right curve
-            bezierVertex(
-                cp1x, -height/2,  // Control point 1
-                cp1x, 0,          // Control point 2
-                0, height/2       // End point
+            // Get end point of branch
+            const endX = currentX + Math.sin(currentAngle) * currentLength;
+            const endY = currentY - Math.cos(currentAngle) * currentLength;
+            
+            // Apply color variation to branches
+            const branchColor = BRANCH_COLOR;
+            
+            // Get the branch color with variation
+            const r = ((branchColor >> 16) & 0xFF) / 255 * this.colorVariation;
+            const g = ((branchColor >> 8) & 0xFF) / 255 * this.colorVariation;
+            const b = (branchColor & 0xFF) / 255 * this.colorVariation;
+            
+            // Convert back to hex
+            const colorValue = (
+                Math.floor(r * 255) << 16 |
+                Math.floor(g * 255) << 8 |
+                Math.floor(b * 255)
             );
-            // Left curve
-            bezierVertex(
-                -cp2x, 0,         // Control point 1
-                -cp2x, -height/2, // Control point 2
-                0, -height/2      // End point
-            );
-            endShape(CLOSE);
             
-            pop();
-        }
-        
-        // Draw children's leaves
-        for (let child of this.children) {
-            push();
-            let branchStartY = -currentLength * child.relativeHeight;
-            let branchStartX = child.side * (currentWidth/2 - child.width/2);
-            
-            translate(0, branchStartY);
-            translate(branchStartX, 0);
-            
-            rotate(child.angle * child.side);
-            child.drawLeaves();
-            pop();
-        }
-        
-        pop();
-    }
-
-    draw() {
-        push();
-        
-        // Initial positioning
-        if (this.level === 0) {
-            translate(this.x, this.y);
-            rotate(this.angle);
-        }
-
-        let currentLength = this.length * this.growth;
-        let currentWidth = this.width * this.growth;
-        let topWidth = currentWidth * 0.5;
-        
-        // Get base color components
-        let baseColor = color('#8E867B');
-        let r = red(baseColor) * this.colorVariation;
-        let g = green(baseColor) * this.colorVariation;
-        let b = blue(baseColor) * this.colorVariation;
-        
-        // Set color with variation
-        fill(r, g, b);
-        noStroke();
-        
-        // Draw branch as trapezoid
-        quad(
-            -currentWidth/2, 0,
-            currentWidth/2, 0,
-            topWidth/2, -currentLength,
-            -topWidth/2, -currentLength
-        );
-        
-        // Draw debug info
-        this.drawDebug(0, 0, currentLength);
-        
-        // Draw leaves for this branch
-        if (this.growth >= this.leafAppearGrowth) {
-            push();
-            translate(0, -currentLength); // Move to end of branch
-            
-            fill('#7C7F4A80'); // Added 80 for 50% transparency
-            noStroke();
-            
-            for (let leaf of this.leaves) {
-                push();
-                rotate(leaf.rotation); // First rotate around branch end
+            // Use cached vertices if fully grown and cached
+            if (this.isFullyGrown && this.cachedVertices) {
+                const { vertices, controlPoints } = this.cachedVertices;
                 
-                // Draw vesica piscis
-                let leafSize = this.level0Width * leaf.size * leaf.growth;
-                let width = leafSize;
-                let height = width * 1.2;
+                // Draw using the cached vertices
+                this.graphics.beginFill(colorValue);
                 
-                // Calculate control points for bezier curves
-                let cp1x = width * 0.4;
-                let cp1y = height * 0.15;
-                let cp2x = width * 0.4;
-                let cp2y = height * 0.85; // Adjusted for pointed ends
+                // Draw the branch shape
+                this.graphics.moveTo(currentX + vertices[0][0], currentY + vertices[0][1]);
+                this.graphics.lineTo(endX + vertices[1][0], endY + vertices[1][1]);
                 
-                // Draw vesica piscis shape using bezier curves
-                beginShape();
-                vertex(0, 0); // Start at branch end (pointed end)
-                // Right curve
-                bezierVertex(
-                    cp1x, cp1y,     // Control point 1
-                    cp1x, height/2,  // Control point 2
-                    0, height        // End point (pointed end)
+                // Draw the top curve using bezier
+                this.graphics.bezierCurveTo(
+                    endX + controlPoints[0][0], endY + controlPoints[0][1],
+                    endX + controlPoints[1][0], endY + controlPoints[1][1],
+                    endX + vertices[2][0], endY + vertices[2][1]
                 );
-                // Left curve
-                bezierVertex(
-                    -cp2x, height/2, // Control point 1
-                    -cp2x, cp1y,    // Control point 2
-                    0, 0            // Back to start (pointed end)
-                );
-                endShape(CLOSE);
                 
-                // Debug visualization for leaf rotation
-                if (debugMode) {
-                    push();
-                    noFill();
-                    stroke(255, 0, 0); // Red for rotation axis
-                    strokeWeight(2);
-                    // Draw rotation axis
-                    line(0, 0, 0, height);
-                    // Draw rotation point
-                    fill(255, 0, 0);
-                    noStroke();
-                    ellipse(0, 0, 6, 6);
-                    // Draw angle text
-                    fill(255);
-                    noStroke();
-                    textSize(12);
-                    textAlign(CENTER);
-                    text(nf(degrees(leaf.rotation), 1, 1) + "°", 0, -10);
-                    pop();
+                this.graphics.lineTo(currentX + vertices[3][0], currentY + vertices[3][1]);
+                
+                // Draw the bottom curve using bezier
+                this.graphics.bezierCurveTo(
+                    currentX + controlPoints[2][0], currentY + controlPoints[2][1],
+                    currentX + controlPoints[3][0], currentY + controlPoints[3][1],
+                    currentX + vertices[0][0], currentY + vertices[0][1]
+                );
+                
+                this.graphics.endFill();
+            } else {
+                // Calculate vertices for this branch
+                if (this.isFullyGrown) {
+                    this.cachedVertices = this.calculateBranchVertices(currentLength, currentWidth, topWidth);
                 }
                 
-                pop();
+                // Get the four corners of the branch (trapezoid)
+                const bottomLeft = {
+                    x: currentX - Math.cos(currentAngle) * (currentWidth/2),
+                    y: currentY - Math.sin(currentAngle) * (currentWidth/2)
+                };
+                
+                const bottomRight = {
+                    x: currentX + Math.cos(currentAngle) * (currentWidth/2),
+                    y: currentY + Math.sin(currentAngle) * (currentWidth/2)
+                };
+                
+                const topLeft = {
+                    x: endX - Math.cos(currentAngle) * (topWidth/2),
+                    y: endY - Math.sin(currentAngle) * (topWidth/2)
+                };
+                
+                const topRight = {
+                    x: endX + Math.cos(currentAngle) * (topWidth/2),
+                    y: endY + Math.sin(currentAngle) * (topWidth/2)
+                };
+                
+                // Calculate control points for bezier curves
+                const topCurveHeight = topWidth * 0.5;
+                const bottomCurveHeight = currentWidth * 0.3;
+                
+                const topLeftControl = {
+                    x: topLeft.x - Math.sin(currentAngle) * topCurveHeight,
+                    y: topLeft.y + Math.cos(currentAngle) * topCurveHeight
+                };
+                
+                const topRightControl = {
+                    x: topRight.x - Math.sin(currentAngle) * topCurveHeight,
+                    y: topRight.y + Math.cos(currentAngle) * topCurveHeight
+                };
+                
+                const bottomRightControl = {
+                    x: bottomRight.x + Math.sin(currentAngle) * bottomCurveHeight,
+                    y: bottomRight.y - Math.cos(currentAngle) * bottomCurveHeight
+                };
+                
+                const bottomLeftControl = {
+                    x: bottomLeft.x + Math.sin(currentAngle) * bottomCurveHeight,
+                    y: bottomLeft.y - Math.cos(currentAngle) * bottomCurveHeight
+                };
+                
+                // Draw the branch shape using bezier curves
+                this.graphics.beginFill(colorValue);
+                
+                this.graphics.moveTo(bottomLeft.x, bottomLeft.y);
+                this.graphics.lineTo(topLeft.x, topLeft.y);
+                
+                // Top curve
+                this.graphics.bezierCurveTo(
+                    topLeftControl.x, topLeftControl.y,
+                    topRightControl.x, topRightControl.y,
+                    topRight.x, topRight.y
+                );
+                
+                this.graphics.lineTo(bottomRight.x, bottomRight.y);
+                
+                // Bottom curve
+                this.graphics.bezierCurveTo(
+                    bottomRightControl.x, bottomRightControl.y,
+                    bottomLeftControl.x, bottomLeftControl.y,
+                    bottomLeft.x, bottomLeft.y
+                );
+                
+                this.graphics.endFill();
             }
-            pop();
-        }
-        
-        // Draw children
-        for (let child of this.children) {
-            push();
-            let branchStartY = -currentLength * child.relativeHeight;
-            let branchStartX = child.side * (currentWidth/2 - child.width/2);
             
-            // Debug: show connection path
+            // Draw leaves
+            if (this.growth >= this.leafAppearGrowth) {
+                for (let leaf of this.leaves) {
+                    if (leaf.growth <= 0) continue;
+                    
+                    const leafAngle = currentAngle + leaf.rotation;
+                    const leafSize = this.level0Width * leaf.size * leaf.growth;
+                    const leafWidth = leafSize;
+                    const leafHeight = leafWidth * 1.2;
+                    
+                    // Apply leaf color variation
+                    const leafBaseColor = LEAF_COLOR;
+                    const lr = ((leafBaseColor >> 16) & 0xFF) / 255 * leaf.colorVariation;
+                    const lg = ((leafBaseColor >> 8) & 0xFF) / 255 * leaf.colorVariation;
+                    const lb = (leafBaseColor & 0xFF) / 255 * leaf.colorVariation;
+                    
+                    const leafColorValue = (
+                        Math.floor(lr * 255) << 16 |
+                        Math.floor(lg * 255) << 8 |
+                        Math.floor(lb * 255)
+                    );
+                    
+                    // Draw bezier leaf shape
+                    this.graphics.beginFill(leafColorValue, 0.8); // Add transparency
+                    
+                    // Calculate leaf points
+                    const leafX = endX;
+                    const leafY = endY;
+                    
+                    const cp1x = leafX + Math.cos(leafAngle) * leafWidth * 0.4;
+                    const cp1y = leafY + Math.sin(leafAngle) * leafWidth * 0.4;
+                    
+                    const cp2x = leafX + Math.cos(leafAngle) * leafWidth * 0.4;
+                    const cp2y = leafY + Math.sin(leafAngle) * (leafHeight - leafWidth * 0.4);
+                    
+                    const endLeafX = leafX + Math.cos(leafAngle) * leafHeight;
+                    const endLeafY = leafY + Math.sin(leafAngle) * leafHeight;
+                    
+                    const cp3x = leafX - Math.cos(leafAngle) * leafWidth * 0.4;
+                    const cp3y = leafY - Math.sin(leafAngle) * leafWidth * 0.4;
+                    
+                    const cp4x = leafX - Math.cos(leafAngle) * leafWidth * 0.4;
+                    const cp4y = leafY - Math.sin(leafAngle) * (leafHeight - leafWidth * 0.4);
+                    
+                    // Draw the leaf shape using bezier curves
+                    this.graphics.moveTo(leafX, leafY);
+                    
+                    // Right side curve
+                    this.graphics.bezierCurveTo(
+                        cp1x, cp1y,
+                        cp2x, cp2y,
+                        endLeafX, endLeafY
+                    );
+                    
+                    // Left side curve
+                    this.graphics.bezierCurveTo(
+                        cp4x, cp4y,
+                        cp3x, cp3y,
+                        leafX, leafY
+                    );
+                    
+                    this.graphics.endFill();
+                }
+            }
+            
+            container.addChild(this.graphics);
+            
+            // Draw debug information if needed
             if (debugMode) {
-                stroke(255, 255, 0);
-                strokeWeight(2);
-                line(0, 0, branchStartX, branchStartY);
+                // Debug connection path from parent to this branch
+                if (parentX !== undefined && parentY !== undefined) {
+                    // Line from parent to branch start
+                    this.graphics.lineStyle(1, 0xFF0000);
+                    this.graphics.moveTo(parentX, parentY);
+                    this.graphics.lineTo(currentX, currentY);
+                    this.graphics.lineStyle(0);
+                }
+                
+                // Debug point at branch start
+                this.graphics.beginFill(0xFF0000);
+                this.graphics.drawCircle(currentX, currentY, 4);
+                this.graphics.endFill();
+                
+                // Debug point at branch end
+                this.graphics.beginFill(0x0000FF);
+                this.graphics.drawCircle(endX, endY, 4);
+                this.graphics.endFill();
+                
+                // Show leaf rotation axis
+                if (this.growth >= this.leafAppearGrowth) {
+                    for (let leaf of this.leaves) {
+                        if (leaf.growth <= 0) continue;
+                        
+                        const leafAngle = currentAngle + leaf.rotation;
+                        const leafSize = this.level0Width * leaf.size * leaf.growth;
+                        
+                        // Draw leaf axis
+                        this.graphics.lineStyle(1, 0x00FF00);
+                        this.graphics.moveTo(endX, endY);
+                        const axisEndX = endX + Math.cos(leafAngle) * leafSize * 1.5;
+                        const axisEndY = endY + Math.sin(leafAngle) * leafSize * 1.5;
+                        this.graphics.lineTo(axisEndX, axisEndY);
+                        this.graphics.lineStyle(0);
+                    }
+                }
+                
+                // Debug info text
+                const debugText = new PIXI.Text(
+                    `Level: ${this.level}\nGrowth: ${nf(this.growth, 1, 2)}\nAngle: ${nf(degrees(currentAngle), 1, 0)}°`,
+                    { fontFamily: 'Arial', fontSize: 10, fill: 0xFFFFFF }
+                );
+                debugText.position.set(currentX + 10, currentY);
+                // Add shadow for better visibility
+                debugText.style.dropShadow = true;
+                debugText.style.dropShadowColor = 0x000000;
+                debugText.style.dropShadowDistance = 1;
+                this.graphics.addChild(debugText);
             }
             
-            translate(0, branchStartY);
-            translate(branchStartX, 0);
-            
-            // Debug: show connection point
-            if (debugMode) {
-                fill(0, 255, 0);
-                noStroke();
-                ellipse(0, 0, 6, 6);
+            // Draw children
+            for (let child of this.children) {
+                child.draw(container, endX, endY, currentAngle);
             }
-            
-            rotate(child.angle * child.side);
-            child.draw();
-            pop();
+        } catch (error) {
+            console.error("Error drawing branch:", error);
         }
-        
-        pop();
     }
 }
 
+console.log("Branch class defined");
+
 class Tree {
     constructor(x, y) {
-        // Random color variation between 0.8 and 1.2 (±20% variation)
-        const colorVar = random(0.8, 1.2);
+        console.log(`Creating tree at ${x}, ${y}`);
+        // Random color variation between 0.9 and 1.1 (±10% variation)
+        const colorVar = random(0.9, 1.1);
         
         // Create the trunk (root branch)
         this.root = new Branch({
@@ -335,6 +560,12 @@ class Tree {
             level: 0,
             colorVariation: colorVar
         });
+        
+        // Create container for this tree
+        this.container = new PIXI.Container();
+        
+        // Add containers to stage
+        app.stage.addChild(this.container);
     }
 
     update() {
@@ -342,50 +573,299 @@ class Tree {
     }
 
     draw() {
-        this.root.draw();
+        try {
+            // Clear previous drawings
+            this.container.removeChildren();
+            
+            // Draw the tree
+            this.root.draw(this.container);
+        } catch (error) {
+            console.error("Error drawing tree:", error);
+        }
     }
 }
 
-let trees = [];
-let lastTreeTime = 0;
-const TREE_INTERVAL = 20000;
-const MAX_TREES = 15;
-const SCENE_SPEED = 1.0;
-let debugMode = false; // Global debug mode flag
+console.log("Tree class defined");
 
+// Debug UI container
+const debugContainer = new PIXI.Container();
+app.stage.addChild(debugContainer);
+
+// Debug text
+let debugText = new PIXI.Text('', {
+    fontFamily: 'Arial',
+    fontSize: 14,
+    fill: 0xFFFFFF,
+    align: 'left'
+});
+debugText.position.set(10, 10);
+debugContainer.addChild(debugText);
+
+// FPS tracking
+let lastTime = typeof performance !== 'undefined' ? performance.now() : 0;
+let frameCount = 0;
+let fps = 0;
+
+// Setup function
 function setup() {
-    createCanvas(windowWidth, windowHeight);
-    frameRate(60);
+    console.log("Setting up");
     
-    // Create initial tree in the center
-    let x = width/2;
-    trees.push(new Tree(x, height));
-    lastTreeTime = millis();
+    // Get HTML elements - these might not exist in tests
+    try {
+        startBtn = document.getElementById('startBtn');
+        pauseBtn = document.getElementById('pauseBtn');
+        debugBtn = document.getElementById('debugBtn');
+        fpsCounter = document.getElementById('fpsCounter');
+        
+        // Only setup DOM events if we're in a browser environment
+        if (startBtn && pauseBtn && debugBtn) {
+            // Initially hide pause button until started
+            pauseBtn.style.display = 'none';
+            
+            // Setup button event handlers
+            startBtn.addEventListener('click', () => {
+                if (!hasStarted) {
+                    startGrowing();
+                }
+            });
+            
+            pauseBtn.addEventListener('click', () => {
+                togglePause();
+            });
+            
+            debugBtn.addEventListener('click', () => {
+                toggleDebug();
+            });
+        }
+    } catch (error) {
+        console.warn('HTML elements not available (likely in test environment)');
+    }
+    
+    // Set up keyboard listeners
+    if (typeof window !== 'undefined') {
+        window.addEventListener('keydown', onKeyDown);
+        window.addEventListener('resize', onResize);
+    }
+    
+    // Set up ticker
+    app.ticker.add(gameLoop);
+    
+    console.log("Setup complete");
 }
 
-function keyPressed() {
-    if (key === 'd' || key === 'D') {
-        debugMode = !debugMode; // Toggle debug mode when 'd' is pressed
+function startGrowing() {
+    hasStarted = true;
+    startBtn.style.display = 'none';
+    pauseBtn.style.display = 'block';
+    
+    // Create first tree at the right edge
+    const initialX = app.renderer.width + TREE_SPACING;
+    trees.push(new Tree(initialX, app.renderer.height));
+    lastTreeX = initialX;
+    
+    // Set initial scroll position so tree starts at growth trigger
+    const growthTriggerX = app.renderer.width - (app.renderer.width/3);
+    scrollX = initialX - growthTriggerX;
+    
+    lastSpawnTime = performance.now();
+    console.log("Started growing trees");
+}
+
+function togglePause() {
+    isPaused = !isPaused;
+    pauseBtn.textContent = isPaused ? 'Resume (P)' : 'Pause (P)';
+    console.log(`Paused: ${isPaused ? 'ON' : 'OFF'}`);
+}
+
+function toggleDebug() {
+    debugMode = !debugMode;
+    debugBtn.textContent = debugMode ? 'Hide Debug (D)' : 'Show Debug (D)';
+    console.log(`Debug mode: ${debugMode ? 'ON' : 'OFF'}`);
+}
+
+function onKeyDown(e) {
+    if (e.key === 'd' || e.key === 'D') {
+        toggleDebug();
+    } else if (e.key === 'p' || e.key === 'P') {
+        if (hasStarted) {
+            togglePause();
+        }
     }
 }
 
-function draw() {
-    background(135, 206, 235);
+function onResize() {
+    app.renderer.resize(window.innerWidth, 900);
+    console.log(`Resized to ${window.innerWidth}x900`);
+}
+
+function drawDebugInfo() {
+    if (!debugMode) {
+        debugContainer.visible = false;
+        return;
+    }
     
-    // Update and draw all trees
+    debugContainer.visible = true;
+    
+    // Calculate average FPS from buffer
+    const avgFps = fpsBuffer.reduce((a, b) => a + b, 0) / fpsBuffer.length || 0;
+    
+    // Update debug text
+    debugText.text = `FPS: ${Math.round(avgFps)} | Trees: ${trees.length} | Scroll: ${Math.round(scrollX)}`;
+    
+    // Draw pause indicator
+    if (isPaused) {
+        const pauseText = new PIXI.Text('PAUSED', {
+            fontFamily: 'Arial',
+            fontSize: 24,
+            fill: 0xFFFFFF,
+            align: 'center'
+        });
+        pauseText.position.set(app.renderer.width / 2, 40);
+        pauseText.anchor.set(0.5);
+        debugContainer.addChild(pauseText);
+    }
+    
+    // Draw scroll position indicator
+    const scrollIndicator = new PIXI.Graphics();
+    scrollIndicator.beginFill(0xFF0000, 0.5);
+    scrollIndicator.drawRect(0, app.renderer.height - 20, app.renderer.width, 10);
+    scrollIndicator.endFill();
+    
+    // Draw tree positions on indicator
     for (let tree of trees) {
-        tree.update();
-        tree.draw();
+        const screenX = tree.root.x - scrollX;
+        const markerX = (screenX / app.renderer.width) * app.renderer.width;
+        
+        if (markerX >= 0 && markerX <= app.renderer.width) {
+            scrollIndicator.beginFill(0x00FF00);
+            scrollIndicator.drawCircle(markerX, app.renderer.height - 15, 5);
+            scrollIndicator.endFill();
+        }
     }
     
-    // Add new trees
-    if (millis() - lastTreeTime > TREE_INTERVAL && trees.length < MAX_TREES) {
-        let x = random(100, width - 100);
-        trees.push(new Tree(x, height));
-        lastTreeTime = millis();
+    // Draw growth trigger line
+    const triggerX = app.renderer.width - (app.renderer.width/3);
+    scrollIndicator.lineStyle(2, 0xFFFF00);
+    scrollIndicator.moveTo(triggerX, app.renderer.height - 30);
+    scrollIndicator.lineTo(triggerX, app.renderer.height - 5);
+    scrollIndicator.lineStyle(0);
+    
+    debugContainer.addChild(scrollIndicator);
+}
+
+function gameLoop(delta) {
+    try {
+        // Clear debug container each frame
+        debugContainer.removeChildren();
+        debugText = new PIXI.Text('', {
+            fontFamily: 'Arial',
+            fontSize: 14,
+            fill: 0xFFFFFF,
+            align: 'left'
+        });
+        debugText.position.set(10, 10);
+        debugContainer.addChild(debugText);
+        
+        // Update FPS counter even when paused
+        if (typeof window !== 'undefined' && typeof performance !== 'undefined') {
+            const now = performance.now();
+            frameCount++;
+            
+            if (now - lastTime >= 1000) {
+                fps = Math.round((frameCount * 1000) / (now - lastTime));
+                frameCount = 0;
+                lastTime = now;
+                
+                // Update FPS buffer
+                fpsBuffer.push(fps);
+                if (fpsBuffer.length > FPS_BUFFER_SIZE) {
+                    fpsBuffer.shift();
+                }
+                
+                // Update FPS counter in HTML
+                if (fpsCounter) {
+                    const avgFps = fpsBuffer.reduce((a, b) => a + b, 0) / fpsBuffer.length || 0;
+                    fpsCounter.textContent = Math.round(avgFps);
+                }
+            }
+        }
+        
+        // Skip processing if paused or not started
+        if (isPaused || !hasStarted) {
+            drawDebugInfo();
+            return;
+        }
+        
+        // Update scroll position (move scene to the left)
+        scrollX += SCENE_SPEED * 0.75;
+        
+        // Calculate screen bounds for culling
+        const screenLeft = scrollX - 100;  // Include small buffer for removal
+        const screenRight = scrollX + app.renderer.width + 100;  // Include buffer for growth
+        
+        // Update and draw all trees with culling
+        for (let i = trees.length - 1; i >= 0; i--) {
+            const tree = trees[i];
+            
+            // Skip trees completely outside view
+            if (tree.root.x < screenLeft) {
+                // Remove tree from stage
+                app.stage.removeChild(tree.container);
+                trees.splice(i, 1);  // Remove from array
+                continue;
+            }
+            
+            // Calculate screen position
+            const screenX = tree.root.x - scrollX;
+            
+            // Only start growing when tree is 1/3 onto the screen
+            if (screenX <= app.renderer.width - (app.renderer.width/3)) {
+                tree.update();
+            }
+            
+            // Update tree position based on scroll
+            tree.container.position.x = -scrollX;
+            tree.draw();
+        }
+        
+        // Add new tree if needed and enough time has passed
+        const timeSinceLastSpawn = typeof performance !== 'undefined' ? performance.now() - lastSpawnTime : 0;
+        if (lastTreeX < scrollX + app.renderer.width && timeSinceLastSpawn >= MIN_SPAWN_INTERVAL) {
+            lastTreeX += TREE_SPACING;
+            trees.push(new Tree(lastTreeX, app.renderer.height));
+            lastSpawnTime = typeof performance !== 'undefined' ? performance.now() : 0;
+            console.log(`Added new tree at ${lastTreeX}. Total trees: ${trees.length}`);
+        }
+        
+        // Draw debug information
+        drawDebugInfo();
+        
+    } catch (error) {
+        console.error("Error in game loop:", error);
     }
 }
 
-function windowResized() {
-    resizeCanvas(windowWidth, windowHeight);
+// Start everything when the page is loaded
+console.log("Starting application");
+if (typeof window !== 'undefined') {
+    window.onload = setup;
+} else {
+    // In test environment, just call setup directly
+    setup();
 }
+
+// Export for testing
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = {
+        Branch,
+        Tree,
+        app,
+        trees,
+        debugMode,
+        setup,
+        onKeyDown,
+        gameLoop,
+        isPaused
+    };
+}
+

@@ -6,11 +6,14 @@ export const MAX_BRANCH_LEVELS = 4;  // Maximum number of branch levels (0 is tr
 export const LEAF_SIZE = 0.45        // Size relative to level 0 branch width
 
 // Colors
-export const BRANCH_COLOR = '#9E958A';
-export const LEAF_COLOR = '#7C7F4A';
-export const SKY_COLOR = [122, 185, 212]; // 10% darker than [135, 206, 235] 
+export const BRANCH_COLOR = 0x9E958A;  // Branch color in hex
+export const LEAF_COLOR = 0x7C7F4A;    // Leaf color in hex
+export const SKY_COLOR = 0x7AB9D4;     // Sky color in hex (10% darker than 0x87CEEB)
 
 // Add trunk constants
-export const TRUNK_LENGTH = 250;  // Previously random(275, 325)
-export const TRUNK_WIDTH = 40;    // Previously random(30, 45)
-export const TRUNK_ANGLE_RANGE = 20;  // Maximum angle in degrees for trunk tilt 
+export const TRUNK_LENGTH = 250;  // Fixed length for trunks
+export const TRUNK_WIDTH = 40;    // Fixed width for trunks
+export const TRUNK_ANGLE_RANGE = 20;  // Maximum angle in degrees for trunk tilt
+
+// Growth constants
+export const MIN_SPAWN_INTERVAL = 2000; // Minimum 2 seconds between spawns 

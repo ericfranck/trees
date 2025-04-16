@@ -1,68 +1,75 @@
-# Procedural Tree Growth Animation
+# Growing Trees Visualization
 
-A creative coding project that generates and animates procedurally growing trees using p5.js. Trees grow organically with branches and leaves, creating a peaceful, ever-evolving scene.
+A visualization of procedurally generated trees with continuously growing branches and leaves.
 
 ## Features
 
-- Procedural tree generation with organic growth animation
-- Infinite scrolling scene with new trees spawning continuously
-- Natural branch and leaf variations within each tree
-- Consistent trunk properties with random tilt angles
-- Pause/resume functionality
-- Debug mode for development
+- Procedurally generated trees with smooth growing animation
+- Realistic branch and leaf shapes using bezier curves
+- Realistic positioning of child branches with bias
+- Scrolling landscape with tree generation system
+- Vertex caching for performance optimization
+- Multiple trees with culling system
+- Detailed debug mode for development and learning
+- WebGL rendering for better performance
+
+## Technical Improvements
+
+### WebGL Rendering with PIXI.js
+- Converted from p5.js to PIXI.js for hardware accelerated rendering
+- Implemented proper scene rendering using PIXI Graphics
+- Bezier curve-based branch and leaf shapes
+- Proper matrix transformations for branch and leaf positioning
+
+### Performance Optimizations
+- Uses WebGL for GPU-accelerated rendering
+- Vertex caching for fully grown branches
+- Intelligent off-screen culling system
+- Optimized branch and leaf calculations
+- Progressive branch and leaf growth
+
+### UI Improvements
+- Start button to begin animation
+- Pause/Resume functionality
+- Debug mode toggle
+- FPS counter
+- On-screen controls and keyboard shortcuts
+
+### Testing
+- Added Jest tests to verify core functionality
+- Implemented a console checker to detect browser errors
 
 ## Controls
 
-- **P**: Pause/Resume the animation
-- **D**: Toggle debug mode
+- Press 'P' to pause/resume animation
+- Press 'D' to toggle debug mode
+- Click UI buttons to control the visualization
 
-## Project Structure
+## Debug Features
 
-```
-src/
-├── classes/
-│   ├── Branch.js    # Branch class for tree segments
-│   └── Tree.js      # Tree class managing overall tree structure
-├── utils/
-│   └── constants.js # Configuration and constants
-└── sketch.js        # Main p5.js sketch file
-```
-
-## Constants
-
-Key parameters that control the tree generation and animation:
-
-- `TRUNK_LENGTH`: Fixed length for tree trunks (250px)
-- `TRUNK_WIDTH`: Fixed width for tree trunks (40px)
-- `TRUNK_ANGLE_RANGE`: Maximum tilt angle for trunks (±20°)
-- `MAX_BRANCH_LEVELS`: Maximum branch depth (4 levels)
-- `TREE_SPACING`: Distance between trees (500px)
-- `SCENE_SPEED`: Global animation speed multiplier
-
-## Setup
-
-1. Clone the repository
-2. Start a local server (e.g., using Python's `http.server` or Live Server in VS Code)
-3. Open in your browser
+When debug mode is enabled, you can see:
+- Branch connection paths
+- Growth points and measurements
+- Leaf rotation axes
+- FPS counter
+- Tree tracking
+- Growth trigger indicators
 
 ## Development
 
-The project uses vanilla JavaScript with p5.js for rendering. Key features can be modified through the constants in `src/utils/constants.js`.
+### Requirements
+- Node.js
 
-### Branch Generation
+### Setup
+```bash
+npm install
+npm start
+```
 
-Branches are generated with:
-- Random angles within constraints
-- Varying lengths relative to parent
-- Natural color variations
-- Smooth growth animations
+### Testing
+```bash
+npm test
+```
 
-### Performance Optimizations
-
-- Shape caching for fully grown branches
-- Vertex data storage for efficient rendering
-- Tree culling when off-screen
-
-## License
-
-MIT License - feel free to use and modify for your own projects! 
+## Credits
+Originally implemented in p5.js, then optimized using PIXI.js for WebGL acceleration. 

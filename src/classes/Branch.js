@@ -9,7 +9,27 @@ import {
     TRUNK_WIDTH,
     TRUNK_ANGLE_RANGE,
     BRANCH_GROWTH_TIME,
-    CHILD_BRANCH_DELAY
+    CHILD_BRANCH_DELAY,
+    BRANCH_MIN_LENGTH,
+    BRANCH_MAX_LENGTH,
+    BRANCH_MIN_WIDTH,
+    BRANCH_MAX_WIDTH,
+    BRANCH_SIDE_ANGLE_RANGE,
+    BRANCH_END_ANGLE_RANGE,
+    BRANCH_MIN_SPAWN_HEIGHT,
+    BRANCH_MAX_SPAWN_HEIGHT,
+    BRANCH_SPAWN_RANDOM_OFFSET,
+    TRUNK_MIN_BRANCHES,
+    TRUNK_MAX_BRANCHES,
+    BRANCH_MIN_CHILDREN,
+    BRANCH_MAX_CHILDREN,
+    LEAF_MIN_COUNT,
+    LEAF_MAX_COUNT,
+    LEAF_WIDTH_RATIO,
+    LEAF_MIN_GROWTH,
+    LEAF_MAX_GROWTH,
+    LEAF_GROWTH_RATE,
+    COLOR_VARIATION_RANGE
 } from '../utils/constants.js';
 import { random, floor, constrain, PI, adjustColor } from '../utils/math.js';
 
@@ -26,8 +46,8 @@ class Branch {
             this.width = TRUNK_WIDTH;
             this.angle = random(-TRUNK_ANGLE_RANGE, TRUNK_ANGLE_RANGE) * PI/180;
         } else {
-            this.length = options.length || random(275, 325);
-            this.width = options.width || random(30, 45);
+            this.length = options.length || random(BRANCH_MIN_LENGTH, BRANCH_MAX_LENGTH);
+            this.width = options.width || random(BRANCH_MIN_WIDTH, BRANCH_MAX_WIDTH);
             this.angle = options.angle || random(-20, 20) * PI/180;
         }
         
@@ -51,49 +71,60 @@ class Branch {
         
         // Branch spawning properties
         if (this.level === 0) {
-            this.maxChildren = floor(random(6, 13)); // More branches for trunk
+            this.maxChildren = floor(random(TRUNK_MIN_BRANCHES, TRUNK_MAX_BRANCHES));
         } else {
-            this.maxChildren = floor(random(2, 5)); // Fewer branches for other levels
+            this.maxChildren = floor(random(BRANCH_MIN_CHILDREN, BRANCH_MAX_CHILDREN));
         }
         
         // Generate child spawn points
         this.childSpawnPoints = [];
-        const minHeight = 0.3;  // Start spawning at 30% of branch length
-        const maxHeight = 0.9;  // Stop spawning at 90% of branch length
-        const heightRange = maxHeight - minHeight;
         
-        // Distribute spawn points along the branch
-        for (let i = 0; i < this.maxChildren; i++) {
-            const baseHeight = minHeight + (heightRange * i / (this.maxChildren - 1));
-            const randomOffset = random(-0.1, 0.1);  // Add some randomness
+        // First, add a spawn point at the end of the branch
+        this.childSpawnPoints.push({
+            relativeHeight: 1.0,
+            triggered: false,
+            isEndPoint: true
+        });
+        
+        // Then distribute remaining spawn points along the branch
+        const remainingChildren = this.maxChildren - 1;
+        for (let i = 0; i < remainingChildren; i++) {
+            const baseHeight = BRANCH_MIN_SPAWN_HEIGHT + 
+                             (BRANCH_MAX_SPAWN_HEIGHT - BRANCH_MIN_SPAWN_HEIGHT) * 
+                             i / (remainingChildren - 1 || 1);
+            const randomOffset = random(-BRANCH_SPAWN_RANDOM_OFFSET, BRANCH_SPAWN_RANDOM_OFFSET);
             this.childSpawnPoints.push({
-                relativeHeight: constrain(baseHeight + randomOffset, minHeight, maxHeight),
-                triggered: false
+                relativeHeight: constrain(baseHeight + randomOffset, BRANCH_MIN_SPAWN_HEIGHT, BRANCH_MAX_SPAWN_HEIGHT),
+                triggered: false,
+                isEndPoint: false
             });
         }
+        
+        // Sort spawn points by height to maintain proper growth order
+        this.childSpawnPoints.sort((a, b) => a.relativeHeight - b.relativeHeight);
         
         // Calculate and store position bias for this branch
         this.randomBias = random(0.2, 2.0);
         if (Math.sign(this.angle) !== this.side) {
-            this.randomBias *= 0.25; // Reduce bias when angle and side don't match
+            this.randomBias *= 0.25;
         }
         
         // Store child branches with their creation times
         this.childBranches = [];
         
         // Leaf properties
-        this.numLeaves = floor(random(1, 3));
-        this.leafAppearGrowth = random(0.2, 0.9);
+        this.numLeaves = floor(random(LEAF_MIN_COUNT, LEAF_MAX_COUNT));
+        this.leafAppearGrowth = random(LEAF_MIN_GROWTH, LEAF_MAX_GROWTH);
         this.leaves = [];
         
         // Initialize leaves
         for (let i = 0; i < this.numLeaves; i++) {
             this.leaves.push({
                 size: LEAF_SIZE,
-                rotation: random(-PI/3.6, PI/3.6),  // Change to ±50 degrees (PI/3.6 ≈ 0.873 radians)
+                rotation: random(-PI/3.6, PI/3.6),  // ±50 degrees
                 growth: 0,
-                growthRate: 0.01 * SCENE_SPEED,
-                colorVariation: random(0.9, 1.1)
+                growthRate: LEAF_GROWTH_RATE * SCENE_SPEED,
+                colorVariation: random(1 - COLOR_VARIATION_RANGE, 1 + COLOR_VARIATION_RANGE)
             });
         }
         
@@ -113,10 +144,15 @@ class Branch {
         this.graphics.addChild(this.debugGraphics);
     }
 
-    addChild(relativeHeight) {
+    addChild(relativeHeight, isEndPoint) {
         const childLength = this.length * random(0.4, 0.7);
         const childWidth = this.width * 0.6;
-        const childAngle = random(-1.22, 1.22);
+        
+        // Adjust angle range based on whether this is an end point branch
+        const childAngle = isEndPoint ? 
+            random(-BRANCH_END_ANGLE_RANGE, BRANCH_END_ANGLE_RANGE) : 
+            random(-BRANCH_SIDE_ANGLE_RANGE, BRANCH_SIDE_ANGLE_RANGE);
+        
         const side = random() < 0.5 ? -1 : 1;
         
         if (this.level < MAX_BRANCH_LEVELS) {
@@ -171,7 +207,7 @@ class Branch {
             // Check spawn points for adding new branches
             for (let spawnPoint of this.childSpawnPoints) {
                 if (!spawnPoint.triggered && this.growth >= spawnPoint.relativeHeight) {
-                    this.addChild(spawnPoint.relativeHeight);
+                    this.addChild(spawnPoint.relativeHeight, spawnPoint.isEndPoint);
                     spawnPoint.triggered = true;
                 }
             }
@@ -277,8 +313,8 @@ class Branch {
             const topRightX = endX + Math.cos(currentAngle) * (topWidth/2);
             const topRightY = endY + Math.sin(currentAngle) * (topWidth/2);
             
-            // Control points for curves
-            const bottomCurveHeight = currentWidth * 0.3;
+            // Control points for curves - increased bottom curve height for rounder bottom
+            const bottomCurveHeight = currentWidth * 0.5;  // Increased from 0.3 to 0.5 for rounder bottom
             const topCurveHeight = topWidth * 0.5;
             
             // Draw the branch shape
@@ -320,8 +356,18 @@ class Branch {
                 bottomRightX, bottomRightY
             );
             
-            // Close the path
-            this.branchGraphics.lineTo(bottomLeftX, bottomLeftY);
+            // Bottom curve - added explicit bottom curve for rounder bottom
+            const bottomCurveLeftX = bottomRightX - Math.sin(currentAngle) * bottomCurveHeight;
+            const bottomCurveLeftY = bottomRightY + Math.cos(currentAngle) * bottomCurveHeight;
+            const bottomCurveRightX = bottomLeftX - Math.sin(currentAngle) * bottomCurveHeight;
+            const bottomCurveRightY = bottomLeftY + Math.cos(currentAngle) * bottomCurveHeight;
+            
+            this.branchGraphics.bezierCurveTo(
+                bottomCurveLeftX, bottomCurveLeftY,
+                bottomCurveRightX, bottomCurveRightY,
+                bottomLeftX, bottomLeftY
+            );
+            
             this.branchGraphics.endFill();
             
             // Draw leaves if they should be visible

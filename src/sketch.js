@@ -14,7 +14,8 @@ const app = new PIXI.Application({
     backgroundColor: SKY_COLOR,
     resolution: window.devicePixelRatio || 1,
     autoDensity: true,
-    antialias: true
+    antialias: true,
+    powerPreference: "high-performance"
 });
 
 // Global state
@@ -57,8 +58,9 @@ function constrain(value, min, max) {
 
 // Initialize function
 function initialize() {
-    // Add canvas to page
-    document.getElementById('canvasContainer').appendChild(app.view);
+    // Add canvas to page and set style
+    const canvas = app.view;
+    document.getElementById('canvasContainer').appendChild(canvas);
     
     // Setup UI elements
     const startBtn = document.getElementById('startBtn');

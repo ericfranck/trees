@@ -94,8 +94,7 @@ function initialize() {
             lastUpdateTime = performance.now() / 1000;
             lastSpawnTime = lastUpdateTime;
             
-            // Start growing immediately
-            firstTree.startGrowing();
+            // First tree will start growing when it passes the trigger point
             firstTree.update(0);
             firstTree.render();
         }
@@ -196,7 +195,7 @@ function update() {
         worldContainer.addChild(newTree.container);
         lastTreeX = newTree.root.x;
         lastSpawnTime = currentTime;
-        newTree.startGrowing();
+        // Tree will start growing automatically when it passes the trigger point
     }
     
     drawDebugInfo();

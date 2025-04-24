@@ -3,9 +3,28 @@
   "version": "1.0.0",
   "description": "Animated tree growth visualization",
   "scripts": {
-    "start": "http-server . -c-1"
+    "start": "http-server . -c-1",
+    "test": "jest",
+    "test:watch": "jest --watch"
   },
   "devDependencies": {
-    "http-server": "^14.1.1"
+    "@babel/core": "^7.24.0",
+    "@babel/preset-env": "^7.24.0",
+    "babel-jest": "^29.7.0",
+    "http-server": "^14.1.1",
+    "jest": "^29.7.0",
+    "jest-environment-jsdom": "^29.7.0"
+  },
+  "jest": {
+    "testEnvironment": "jsdom",
+    "moduleNameMapper": {
+      "\\.(css|less|scss|sass)$": "identity-obj-proxy"
+    },
+    "transformIgnorePatterns": [
+      "/node_modules/(?!pixi.js)/"
+    ]
+  },
+  "dependencies": {
+    "pixi.js": "^8.9.1"
   }
-} 
+}

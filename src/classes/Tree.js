@@ -45,12 +45,12 @@ class Tree {
         // Calculate growth trigger point (1/3 into viewport from right)
         const triggerX = window.innerWidth - (window.innerWidth/3);
         
-        // Return true if we're past the trigger point
-        return screenX >= triggerX;
+        // Return true if we've passed the trigger point from right to left
+        return screenX <= triggerX;
     }
 
     update(deltaTime) {
-        // Only start growing if we're past the trigger point
+        // Only start growing if we've passed the trigger point
         if (!this.hasStartedGrowing && this.isPastGrowthTrigger()) {
             this.startGrowing();
         }

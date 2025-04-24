@@ -30,6 +30,13 @@ class Tree {
         this.hasStartedGrowing = false;
     }
     
+    startGrowing() {
+        if (!this.hasStartedGrowing) {
+            this.hasStartedGrowing = true;
+            this.root.startGrowing();
+        }
+    }
+    
     isPastGrowthTrigger() {
         // Get the tree's screen position
         const worldX = this.root.x;
@@ -42,14 +49,13 @@ class Tree {
         return screenX >= triggerX;
     }
 
-    update() {
+    update(deltaTime) {
         // Only start growing if we're past the trigger point
         if (!this.hasStartedGrowing && this.isPastGrowthTrigger()) {
-            this.hasStartedGrowing = true;
-            this.root.startGrowing();
+            this.startGrowing();
         }
         
-        this.root.update();
+        this.root.update(deltaTime);
     }
 
     render() {

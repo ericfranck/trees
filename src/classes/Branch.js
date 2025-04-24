@@ -29,9 +29,13 @@ import {
     LEAF_MIN_GROWTH,
     LEAF_MAX_GROWTH,
     LEAF_GROWTH_RATE,
-    COLOR_VARIATION_RANGE
+    COLOR_VARIATION_RANGE,
+    LEAF_ANGLE_RANGE
 } from '../utils/constants.js';
 import { random, floor, constrain, PI, adjustColor } from '../utils/math.js';
+
+// Helper function to convert degrees to radians
+const toRadians = degrees => degrees * PI / 180;
 
 class Branch {
     constructor(options) {
@@ -44,19 +48,19 @@ class Branch {
         if (this.level === 0) {
             this.length = TRUNK_LENGTH;
             this.width = TRUNK_WIDTH;
-            this.angle = random(-TRUNK_ANGLE_RANGE, TRUNK_ANGLE_RANGE) * PI/180;
+            this.angle = toRadians(random(-TRUNK_ANGLE_RANGE, TRUNK_ANGLE_RANGE));
         } else {
             this.length = options.length || random(BRANCH_MIN_LENGTH, BRANCH_MAX_LENGTH);
             this.width = options.width || random(BRANCH_MIN_WIDTH, BRANCH_MAX_WIDTH);
-            this.angle = options.angle || random(-20, 20) * PI/180;
+            this.angle = options.angle || toRadians(random(-20, 20));
         }
         
         this.growth = 0;
         this.children = [];
-        this.creationTime = performance.now();
-        this.growthStartTime = null;  // Will be set when growth actually starts
-        this.shouldStartGrowing = false;  // New flag to control growth start
-        this.growthRate = 1 / BRANCH_GROWTH_TIME;  // Growth per millisecond
+        this.creationTime = performance.now() / 1000; // Store in seconds
+        this.growthStartTime = null;
+        this.shouldStartGrowing = false;
+        this.growthRate = 1.0 / BRANCH_GROWTH_TIME; // Rate is now correctly in per-second
         this.relativeHeight = options.relativeHeight || 0;
         this.side = options.side || 0;
         
@@ -113,15 +117,15 @@ class Branch {
         this.childBranches = [];
         
         // Leaf properties
-        this.numLeaves = floor(random(LEAF_MIN_COUNT, LEAF_MAX_COUNT));
         this.leafAppearGrowth = random(LEAF_MIN_GROWTH, LEAF_MAX_GROWTH);
         this.leaves = [];
+        const numLeaves = floor(random(LEAF_MIN_COUNT, LEAF_MAX_COUNT));
         
-        // Initialize leaves
-        for (let i = 0; i < this.numLeaves; i++) {
+        // Initialize leaves with fixed rotations
+        for (let i = 0; i < numLeaves; i++) {
             this.leaves.push({
                 size: LEAF_SIZE,
-                rotation: random(-PI/3.6, PI/3.6),  // ±50 degrees
+                rotation: toRadians(random(-LEAF_ANGLE_RANGE, LEAF_ANGLE_RANGE)), // Cache the rotation
                 growth: 0,
                 growthRate: LEAF_GROWTH_RATE * SCENE_SPEED,
                 colorVariation: random(1 - COLOR_VARIATION_RANGE, 1 + COLOR_VARIATION_RANGE)
@@ -149,9 +153,8 @@ class Branch {
         const childWidth = this.width * 0.6;
         
         // Adjust angle range based on whether this is an end point branch
-        const childAngle = isEndPoint ? 
-            random(-BRANCH_END_ANGLE_RANGE, BRANCH_END_ANGLE_RANGE) : 
-            random(-BRANCH_SIDE_ANGLE_RANGE, BRANCH_SIDE_ANGLE_RANGE);
+        const angleRange = isEndPoint ? BRANCH_END_ANGLE_RANGE : BRANCH_SIDE_ANGLE_RANGE;
+        const childAngle = toRadians(random(-angleRange, angleRange));
         
         const side = random() < 0.5 ? -1 : 1;
         
@@ -179,11 +182,14 @@ class Branch {
 
     startGrowing() {
         this.shouldStartGrowing = true;
-        this.growthStartTime = performance.now();
+        this.growthStartTime = performance.now() / 1000; // Store in seconds
     }
 
-    update() {
-        const now = performance.now();
+    update(deltaTime) {
+        // Only update if we have delta time
+        if (deltaTime === undefined) return;
+        
+        const now = performance.now() / 1000; // Current time in seconds
         
         // Initialize growth start time if not set
         if (this.growthStartTime === null) {
@@ -196,13 +202,14 @@ class Branch {
             else if (this.parent && this.parent.growthStartTime && 
                      (now - this.creationTime >= CHILD_BRANCH_DELAY)) {
                 this.growthStartTime = now;
+                this.shouldStartGrowing = true;
             }
         }
         
         // Only update growth if we've started growing
-        if (this.growthStartTime !== null) {
-            const growthElapsed = now - this.growthStartTime;
-            this.growth = constrain(growthElapsed / BRANCH_GROWTH_TIME, 0, 1);
+        if (this.shouldStartGrowing) {
+            // Update growth based on delta time
+            this.growth = Math.min(this.growth + (this.growthRate * deltaTime), 1);
             
             // Check spawn points for adding new branches
             for (let spawnPoint of this.childSpawnPoints) {
@@ -214,10 +221,10 @@ class Branch {
             
             // Update leaf growth
             if (this.growth >= this.leafAppearGrowth) {
+                const leafGrowthRate = LEAF_GROWTH_RATE * deltaTime;
                 for (let leaf of this.leaves) {
                     if (leaf.growth < 1) {
-                        leaf.growth += leaf.growthRate;
-                        leaf.growth = constrain(leaf.growth, 0, 1);
+                        leaf.growth = Math.min(leaf.growth + leafGrowthRate, 1);
                     }
                 }
             }
@@ -225,11 +232,16 @@ class Branch {
         
         // Update all children
         for (let childInfo of this.childBranches) {
-            childInfo.branch.update();
+            if (this.growth >= childInfo.branch.relativeHeight) {
+                childInfo.branch.startGrowing();
+            }
+            childInfo.branch.update(deltaTime);
         }
         
         // Clear cache if not fully grown
-        this.cachedVertices = null;
+        if (this.growth < 1) {
+            this.cachedVertices = null;
+        }
     }
 
     calculateBranchVertices(currentLength, currentWidth, topWidth) {
@@ -374,12 +386,17 @@ class Branch {
             if (this.growth >= this.leafAppearGrowth && this.level > 0) {
                 this.leafGraphics.clear();
                 
+                // Calculate branch end point once
+                const endX = currentX + Math.sin(currentAngle) * currentLength;
+                const endY = currentY - Math.cos(currentAngle) * currentLength;
+                const topWidth = currentWidth * 0.5;
+                
                 for (let leaf of this.leaves) {
                     if (leaf.growth > 0) {
                         const leafColor = adjustColor(LEAF_COLOR, leaf.colorVariation);
                         const currentLeafSize = LEAF_SIZE * leaf.growth;
                         
-                        // Calculate leaf base position (attachment point)
+                        // Calculate leaf base position using cached rotation
                         const leafX = endX + Math.sin(currentAngle + leaf.rotation) * (topWidth/2);
                         const leafY = endY - Math.cos(currentAngle + leaf.rotation) * (topWidth/2);
                         
@@ -390,9 +407,9 @@ class Branch {
                         // Calculate the almond shape points
                         const angle = currentAngle + leaf.rotation;
                         const length = currentLeafSize;
-                        const width = currentLeafSize * 0.4;
+                        const width = currentLeafSize * LEAF_WIDTH_RATIO;
                         
-                        // Calculate points relative to base point (leafX, leafY is now the base)
+                        // Calculate points relative to base point
                         const topX = leafX + Math.sin(angle) * length;
                         const topY = leafY - Math.cos(angle) * length;
                         
@@ -403,7 +420,7 @@ class Branch {
                         const control2Y = leafY - Math.sin(angle) * width - Math.cos(angle) * length/2;
                         
                         // Draw the almond shape using two quadratic curves
-                        this.leafGraphics.moveTo(leafX, leafY);  // Start at base
+                        this.leafGraphics.moveTo(leafX, leafY);
                         this.leafGraphics.quadraticCurveTo(controlX, controlY, topX, topY);
                         this.leafGraphics.quadraticCurveTo(control2X, control2Y, leafX, leafY);
                         this.leafGraphics.endFill();

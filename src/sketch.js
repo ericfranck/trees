@@ -26,6 +26,10 @@ let scrollX = 0;
 let lastTreeX = 0;
 let lastSpawnTime = 0;
 let isPaused = false;
+let lastUpdateTime = performance.now() / 1000; // Store in seconds
+
+// Constants for time-based movement
+const PIXELS_PER_SECOND = 45; // Approximately matches original speed
 
 // FPS tracking
 let fpsBuffer = [];
@@ -87,17 +91,22 @@ function initialize() {
             
             // Start with no scroll offset
             scrollX = 0;
+            lastUpdateTime = performance.now() / 1000;
+            lastSpawnTime = lastUpdateTime;
             
             // Start growing immediately
-            firstTree.update();
+            firstTree.startGrowing();
+            firstTree.update(0);
             firstTree.render();
-            
-            lastSpawnTime = performance.now();
         }
     });
     
     pauseBtn.addEventListener('click', () => {
         isPaused = !isPaused;
+        if (!isPaused) {
+            lastUpdateTime = performance.now() / 1000;
+            lastSpawnTime = lastUpdateTime;
+        }
         pauseBtn.textContent = isPaused ? 'Resume (P)' : 'Pause (P)';
     });
     
@@ -110,6 +119,10 @@ function initialize() {
     window.addEventListener('keydown', (e) => {
         if (e.key.toLowerCase() === 'p') {
             isPaused = !isPaused;
+            if (!isPaused) {
+                lastUpdateTime = performance.now() / 1000;
+                lastSpawnTime = lastUpdateTime;
+            }
             pauseBtn.textContent = isPaused ? 'Resume (P)' : 'Pause (P)';
         } else if (e.key.toLowerCase() === 'd') {
             debugMode = !debugMode;
@@ -144,11 +157,17 @@ function update() {
         drawDebugInfo();
         return;
     }
+
+    // Calculate delta time in seconds
+    const currentTime = performance.now() / 1000;
+    const deltaTime = Math.min(currentTime - lastUpdateTime, 0.1); // Cap at 100ms
+    lastUpdateTime = currentTime;
     
-    // Update scroll position
-    scrollX += SCENE_SPEED * 0.75;
+    // Update scroll position using delta time
+    const scrollDistance = PIXELS_PER_SECOND * deltaTime;
+    scrollX += scrollDistance;
     worldContainer.x = -scrollX;
-    updateScrollX(scrollX);  // Update the Tree class's scroll position
+    updateScrollX(scrollX);
     
     // Update and cull trees
     for (let i = trees.length - 1; i >= 0; i--) {
@@ -161,20 +180,23 @@ function update() {
             continue;
         }
         
-        tree.update();
+        tree.update(deltaTime);
         tree.render();
     }
     
     // Spawn new trees when the last tree crosses the growth trigger point
     const growthTriggerX = app.screen.width - (app.screen.width/3);
     const lastTreeScreenX = lastTreeX - scrollX;
+    const timeSinceLastSpawn = currentTime - lastSpawnTime;
     
-    if (lastTreeScreenX <= growthTriggerX) {
+    if (lastTreeScreenX <= growthTriggerX && timeSinceLastSpawn >= MIN_SPAWN_INTERVAL) {
         // Position the new tree one spacing away from the last tree
         const newTree = new Tree(lastTreeX + TREE_SPACING, app.screen.height);
         trees.push(newTree);
         worldContainer.addChild(newTree.container);
         lastTreeX = newTree.root.x;
+        lastSpawnTime = currentTime;
+        newTree.startGrowing();
     }
     
     drawDebugInfo();

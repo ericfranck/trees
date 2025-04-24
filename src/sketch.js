@@ -7,15 +7,26 @@ import {
 } from './utils/constants.js';
 import { updateScrollX } from './classes/Tree.js';
 
+// WebGL Optimizations
+PIXI.settings.SPRITE_MAX_TEXTURES = Math.min(
+    PIXI.settings.SPRITE_MAX_TEXTURES,
+    16
+);
+
+PIXI.settings.RENDER_OPTIONS.antialias = false;
+PIXI.settings.RENDER_OPTIONS.forceFXAA = false;
+PIXI.settings.ROUND_PIXELS = true;
+
 // Initialize PIXI Application
 const app = new PIXI.Application({
     width: window.innerWidth,
     height: 900,
     backgroundColor: SKY_COLOR,
-    resolution: window.devicePixelRatio || 1,
+    resolution: Math.min(2, window.devicePixelRatio || 1), // Cap resolution at 2x
     autoDensity: true,
-    antialias: true,
-    powerPreference: "high-performance"
+    antialias: false, // Disable antialiasing for better performance
+    powerPreference: "high-performance",
+    autoStart: false // We'll control the ticker manually
 });
 
 // Global state
@@ -134,8 +145,10 @@ function initialize() {
         app.renderer.resize(window.innerWidth, 900);
     });
     
-    // Start the game loop
+    // Start the game loop with a fixed FPS
+    app.ticker.maxFPS = 60;
     app.ticker.add(update);
+    app.ticker.start();
 }
 
 function update() {
@@ -169,18 +182,24 @@ function update() {
     updateScrollX(scrollX);
     
     // Update and cull trees
+    const viewportLeft = scrollX;
+    const viewportRight = scrollX + app.screen.width;
+    
     for (let i = trees.length - 1; i >= 0; i--) {
         const tree = trees[i];
+        const treeX = tree.root.x;
         
-        // Remove trees that are too far left
-        if (tree.root.x < scrollX - 100) {
-            worldContainer.removeChild(tree.container);
-            trees.splice(i, 1);
-            continue;
+        // Only update trees that are in or near the viewport
+        if (treeX >= viewportLeft - 100 && treeX <= viewportRight + 100) {
+            tree.update(deltaTime);
+            tree.render();
         }
         
-        tree.update(deltaTime);
-        tree.render();
+        // Remove trees that are too far left
+        if (treeX < viewportLeft - 100) {
+            worldContainer.removeChild(tree.container);
+            trees.splice(i, 1);
+        }
     }
     
     // Spawn new trees when the last tree crosses the growth trigger point
@@ -189,23 +208,21 @@ function update() {
     const timeSinceLastSpawn = currentTime - lastSpawnTime;
     
     if (lastTreeScreenX <= growthTriggerX && timeSinceLastSpawn >= MIN_SPAWN_INTERVAL) {
-        // Position the new tree one spacing away from the last tree
         const newTree = new Tree(lastTreeX + TREE_SPACING, app.screen.height);
         trees.push(newTree);
         worldContainer.addChild(newTree.container);
         lastTreeX = newTree.root.x;
         lastSpawnTime = currentTime;
-        // Tree will start growing automatically when it passes the trigger point
     }
     
     drawDebugInfo();
 }
 
 function drawDebugInfo() {
+    if (!debugMode) return;
+    
     // Clear previous debug graphics
     debugContainer.removeChildren();
-    
-    if (!debugMode) return;
     
     // Create debug graphics
     const debugGraphics = new PIXI.Graphics();
@@ -232,11 +249,14 @@ function drawDebugInfo() {
     debugGraphics.moveTo(triggerX, 0);
     debugGraphics.lineTo(triggerX, 20);
     
-    // Draw tree markers
+    // Draw tree markers only for visible trees
     debugGraphics.lineStyle(1, 0x00FF00);
+    const viewportLeft = scrollX;
+    const viewportRight = scrollX + app.screen.width;
+    
     for (let tree of trees) {
         const screenX = tree.root.x - scrollX;
-        if (screenX >= 0 && screenX <= app.screen.width) {
+        if (screenX >= -100 && screenX <= app.screen.width + 100) {
             debugGraphics.moveTo(screenX, 0);
             debugGraphics.lineTo(screenX, 10);
         }

@@ -169,13 +169,16 @@ class Tree {
     }
 
     isOffScreen() {
-        // Get the tree's screen position
-        const worldX = this.root.x;
-        const screenX = worldX - scrollX;
+        if (!this.container && !this.sprite) return true;
         
-        // Check if the tree is completely off screen to the left
-        // Add a buffer of tree width to ensure it's completely off screen
-        return screenX < -this.container.width;
+        // Get the screen position of the tree
+        const screenPosition = this.container ? this.container.getGlobalPosition() : this.sprite.getGlobalPosition();
+        
+        // Get the bounds of the tree
+        const bounds = this.container ? this.container.getBounds() : this.sprite.getBounds();
+        
+        // Check if the entire tree is past the left edge of the viewport
+        return bounds.x + bounds.width < 0;
     }
 
     destroy() {

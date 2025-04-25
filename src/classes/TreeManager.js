@@ -10,7 +10,7 @@ export class TreeManager {
     }
 
     spawnTree() {
-        const currentTime = performance.now() / 1000;
+        const currentTime = Date.now();
         const timeSinceLastSpawn = currentTime - this.lastSpawnTime;
         
         if (timeSinceLastSpawn >= this.minSpawnInterval) {

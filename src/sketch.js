@@ -52,7 +52,7 @@ app.stage.addChild(worldContainer);
 
 // Debug container for overlay information
 const debugContainer = new PIXI.Container();
-app.stage.addChild(debugContainer);
+app.stage.addChild(debugContainer);  // Back to stage for screen-space coordinates
 
 // Utility functions
 function random(min, max) {
@@ -187,18 +187,17 @@ function update() {
     
     for (let i = trees.length - 1; i >= 0; i--) {
         const tree = trees[i];
-        const treeX = tree.root.x;
         
         // Only update trees that are in or near the viewport
-        if (treeX >= viewportLeft - 100 && treeX <= viewportRight + 100) {
+        if (tree.root.x >= viewportLeft - 100 && tree.root.x <= viewportRight + 100) {
             tree.update(deltaTime);
             if (!tree.isConvertedToSprite) {
                 tree.render();
             }
         }
         
-        // Remove trees that are too far left
-        if (treeX < viewportLeft - 100) {
+        // Remove trees that are entirely past the culling threshold
+        if (tree.isOffScreen()) {
             if (tree.isConvertedToSprite) {
                 worldContainer.removeChild(tree.sprite);
             } else {
@@ -255,33 +254,38 @@ function drawDebugInfo() {
     debugGraphics.moveTo(triggerX, 0);
     debugGraphics.lineTo(triggerX, 20);
     
-    // Draw tree markers and positions
-    const viewportLeft = scrollX;
-    const viewportRight = scrollX + app.screen.width;
+    // Draw viewport and culling zones
+    const debugMargin = 400; // Width of yellow margins
     
+    // Draw debug margins (yellow)
+    debugGraphics.lineStyle(1, 0xFFFF00, 0.2);
+    debugGraphics.beginFill(0xFFFF00, 0.1);
+    debugGraphics.drawRect(-debugMargin, 0, debugMargin, app.screen.height); // Left margin
+    debugGraphics.drawRect(app.screen.width, 0, debugMargin, app.screen.height); // Right margin
+    debugGraphics.endFill();
+    
+    // Draw viewport bounds (screen space)
+    debugGraphics.lineStyle(2, 0x00FFFF, 0.5);
+    debugGraphics.drawRect(0, 0, app.screen.width, app.screen.height);
+    
+    // Draw culling zone (screen space)
+    debugGraphics.lineStyle(1, 0xFF0000, 0.3);
+    debugGraphics.beginFill(0xFF0000, 0.1);
+    debugGraphics.drawRect(0, 0, 1, app.screen.height); // Culling zone at left edge
+    debugGraphics.endFill();
+    
+    // Draw tree markers and positions
     trees.forEach((tree, index) => {
         const treeX = tree.root.x;
         const screenX = treeX - scrollX;
         
-        if (screenX >= -100 && screenX <= app.screen.width + 100) {
+        if (screenX >= -debugMargin && screenX <= app.screen.width + debugMargin) {
             // Draw different colors for container vs sprite
             if (tree.isConvertedToSprite) {
                 // Sprite - Red marker
                 debugGraphics.lineStyle(2, 0xFF0000);
                 debugGraphics.moveTo(screenX, 30);
                 debugGraphics.lineTo(screenX, 40);
-                
-                // Draw sprite bounds if it exists
-                if (tree.sprite) {
-                    const spriteBounds = tree.sprite.getBounds();
-                    debugGraphics.lineStyle(1, 0xFF0000, 0.5);
-                    debugGraphics.drawRect(
-                        spriteBounds.x - scrollX,
-                        spriteBounds.y,
-                        spriteBounds.width,
-                        spriteBounds.height
-                    );
-                }
             } else {
                 // Container - Green marker (just the vertical line, no rectangle)
                 debugGraphics.lineStyle(2, 0x00FF00);

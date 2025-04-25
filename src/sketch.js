@@ -95,7 +95,7 @@ function initialize() {
             // Position first tree at the growth trigger point
             const growthTriggerX = app.screen.width - (app.screen.width/3);
             const initialX = growthTriggerX;
-            const firstTree = new Tree(initialX, app.screen.height);
+            const firstTree = new Tree(initialX, app.screen.height, app);
             trees.push(firstTree);
             worldContainer.addChild(firstTree.container);
             lastTreeX = initialX;
@@ -192,12 +192,18 @@ function update() {
         // Only update trees that are in or near the viewport
         if (treeX >= viewportLeft - 100 && treeX <= viewportRight + 100) {
             tree.update(deltaTime);
-            tree.render();
+            if (!tree.isConvertedToSprite) {
+                tree.render();
+            }
         }
         
         // Remove trees that are too far left
         if (treeX < viewportLeft - 100) {
-            worldContainer.removeChild(tree.container);
+            if (tree.isConvertedToSprite) {
+                worldContainer.removeChild(tree.sprite);
+            } else {
+                worldContainer.removeChild(tree.container);
+            }
             trees.splice(i, 1);
         }
     }
@@ -208,7 +214,7 @@ function update() {
     const timeSinceLastSpawn = currentTime - lastSpawnTime;
     
     if (lastTreeScreenX <= growthTriggerX && timeSinceLastSpawn >= MIN_SPAWN_INTERVAL) {
-        const newTree = new Tree(lastTreeX + TREE_SPACING, app.screen.height);
+        const newTree = new Tree(lastTreeX + TREE_SPACING, app.screen.height, app);
         trees.push(newTree);
         worldContainer.addChild(newTree.container);
         lastTreeX = newTree.root.x;
@@ -231,9 +237,9 @@ function drawDebugInfo() {
     // Calculate average FPS
     const avgFps = fpsBuffer.reduce((a, b) => a + b, 0) / fpsBuffer.length || 0;
     
-    // Draw FPS and tree count
+    // Draw FPS, tree count, and scroll position
     const debugText = new PIXI.Text(
-        `FPS: ${Math.round(avgFps)} | Trees: ${trees.length}`,
+        `FPS: ${Math.round(avgFps)} | Trees: ${trees.length} | ScrollX: ${Math.round(scrollX)}`,
         {
             fontFamily: 'Arial',
             fontSize: 14,
@@ -249,18 +255,64 @@ function drawDebugInfo() {
     debugGraphics.moveTo(triggerX, 0);
     debugGraphics.lineTo(triggerX, 20);
     
-    // Draw tree markers only for visible trees
-    debugGraphics.lineStyle(1, 0x00FF00);
+    // Draw tree markers and positions
     const viewportLeft = scrollX;
     const viewportRight = scrollX + app.screen.width;
     
-    for (let tree of trees) {
-        const screenX = tree.root.x - scrollX;
+    trees.forEach((tree, index) => {
+        const treeX = tree.root.x;
+        const screenX = treeX - scrollX;
+        
         if (screenX >= -100 && screenX <= app.screen.width + 100) {
-            debugGraphics.moveTo(screenX, 0);
-            debugGraphics.lineTo(screenX, 10);
+            // Draw different colors for container vs sprite
+            if (tree.isConvertedToSprite) {
+                // Sprite - Red marker
+                debugGraphics.lineStyle(2, 0xFF0000);
+                debugGraphics.moveTo(screenX, 30);
+                debugGraphics.lineTo(screenX, 40);
+                
+                // Draw sprite bounds if it exists
+                if (tree.sprite) {
+                    const spriteBounds = tree.sprite.getBounds();
+                    debugGraphics.lineStyle(1, 0xFF0000, 0.5);
+                    debugGraphics.drawRect(
+                        spriteBounds.x - scrollX,
+                        spriteBounds.y,
+                        spriteBounds.width,
+                        spriteBounds.height
+                    );
+                }
+            } else {
+                // Container - Green marker
+                debugGraphics.lineStyle(2, 0x00FF00);
+                debugGraphics.moveTo(screenX, 30);
+                debugGraphics.lineTo(screenX, 40);
+                
+                // Draw container bounds
+                const containerBounds = tree.container.getBounds();
+                debugGraphics.lineStyle(1, 0x00FF00, 0.5);
+                debugGraphics.drawRect(
+                    containerBounds.x - scrollX,
+                    containerBounds.y,
+                    containerBounds.width,
+                    containerBounds.height
+                );
+            }
+            
+            // Add position text
+            const posText = new PIXI.Text(
+                `Tree ${index}: ${Math.round(treeX)} -> ${Math.round(screenX)}`,
+                {
+                    fontFamily: 'Arial',
+                    fontSize: 10,
+                    fill: tree.isConvertedToSprite ? 0xFF0000 : 0x00FF00
+                }
+            );
+            posText.position.set(screenX, 45);
+            posText.anchor.set(0.5, 0);
+            debugContainer.addChild(posText);
         }
-    }
+    });
 }
 
 // Start everything when the page is loaded

@@ -138,7 +138,7 @@ class Branch {
         
         // Simplify caching - store vertices instead of graphics
         this.cachedVertices = null;
-        this.isFullyGrown = false;
+        this.hasFullyGrown = false;
         
         // PIXI graphics objects
         this.graphics = new PIXI.Container();
@@ -531,6 +531,23 @@ class Branch {
         } catch (error) {
             console.error("Error rendering branch:", error);
         }
+    }
+
+    isFullyGrown() {
+        // Check if this branch is fully grown
+        if (this.growth < 1) return false;
+        
+        // Check if all leaves are fully grown
+        for (const leaf of this.leaves) {
+            if (leaf.growth < 1) return false;
+        }
+        
+        // Check if all child branches are fully grown
+        for (const childInfo of this.childBranches) {
+            if (!childInfo.branch.isFullyGrown()) return false;
+        }
+        
+        return true;
     }
 }
 

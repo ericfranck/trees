@@ -34,7 +34,8 @@ jest.mock('../classes/Branch.js', () => {
         graphics: new mockPIXI.Graphics(),
         startGrowing: jest.fn(),
         update: jest.fn(),
-        render: jest.fn()
+        render: jest.fn(),
+        isFullyGrown: jest.fn().mockReturnValue(false)
     }));
 });
 

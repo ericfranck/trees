@@ -177,7 +177,7 @@ class Branch {
             
             this.childBranches.push({
                 branch: child,
-                creationTime: performance.now()
+                creationTime: performance.now() / 1000 // Store in seconds
             });
             
             this.children.push(child);
@@ -202,9 +202,9 @@ class Branch {
                 if (!this.shouldStartGrowing) return;
                 this.growthStartTime = now;
             } 
-            // For other branches, wait for the delay after parent starts
+            // For other branches, wait for the delay after parent starts growing
             else if (this.parent && this.parent.growthStartTime && 
-                     (now - this.creationTime >= CHILD_BRANCH_DELAY)) {
+                     (now - this.parent.growthStartTime >= CHILD_BRANCH_DELAY)) {
                 this.growthStartTime = now;
                 this.shouldStartGrowing = true;
             }
@@ -236,10 +236,11 @@ class Branch {
         
         // Update all children
         for (let childInfo of this.childBranches) {
+            // Only start growing if parent has reached the spawn point
             if (this.growth >= childInfo.branch.relativeHeight) {
-                childInfo.branch.startGrowing();
+                // Don't call startGrowing here - let the child's update handle it
+                childInfo.branch.update(deltaTime);
             }
-            childInfo.branch.update(deltaTime);
         }
         
         // Clear cache if not fully grown

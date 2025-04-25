@@ -1,13 +1,13 @@
 // Scene settings
 export const TREE_INTERVAL = 20000;  // Time between new trees (ms)
-export const SCENE_SPEED = 0.5;      // Global speed multiplier (adjusted for 2s growth)
+export const SCENE_SPEED = 40;      // Global speed multiplier (adjusted for 2s growth)
 export const TREE_SPACING = 500;     // Fixed spacing between trees
 export const MAX_BRANCH_LEVELS = 7;  // Maximum number of branch levels (0 is trunk)
 export const LEAF_SIZE = 18;        // Base size for leaves
 
 // Growth timing (all in seconds for consistency with delta time)
-export const BRANCH_GROWTH_TIME = 1.0;     // Time for a branch to grow fully (seconds)
-export const CHILD_BRANCH_DELAY = 0.1;     // Delay before child branches start growing (seconds)
+export const BRANCH_GROWTH_TIME = 2;     // Time for a branch to grow fully (seconds)
+export const CHILD_BRANCH_DELAY = 1;     // Delay before child branches start growing (seconds)
 
 // Colors
 export const BRANCH_COLOR = 0x9E958A;  // Branch color in hex
@@ -15,8 +15,8 @@ export const LEAF_COLOR = 0x7C7F4A;    // Leaf color in hex
 export const SKY_COLOR = 0x7AB9D4;     // Sky color in hex (10% darker than 0x87CEEB)
 
 // Add trunk constants
-export const TRUNK_LENGTH = 200;  // Fixed length for trunks
-export const TRUNK_WIDTH = 40;    // Fixed width for trunks
+export const TRUNK_LENGTH = 220;  // Fixed length for trunks
+export const TRUNK_WIDTH = 30;    // Fixed width for trunks
 export const TRUNK_ANGLE_RANGE = 20;  // Maximum angle in degrees for trunk tilt
 
 // Growth constants
@@ -31,10 +31,10 @@ export const BRANCH_SIDE_ANGLE_RANGE = 70;  // Maximum angle for side branches (
 export const BRANCH_END_ANGLE_RANGE = 23;   // Maximum angle for end branches (±23 degrees)
 
 // Branch reduction ratios
-export const CHILD_LENGTH_MIN_RATIO = 0.68;  // Minimum length ratio for child branches (40% of parent)
-export const CHILD_LENGTH_MAX_RATIO = 0.71;  // Maximum length ratio for child branches (70% of parent)
-export const CHILD_WIDTH_RATIO = 0.6;       // Width ratio for child branches (60% of parent)
-export const BRANCH_TOP_WIDTH_RATIO = 0.5;  // Width ratio for branch top (50% of base width)
+export const CHILD_LENGTH_MIN_RATIO = 0.65;  // Minimum length ratio for child branches (40% of parent)
+export const CHILD_LENGTH_MAX_RATIO = 0.65;  // Maximum length ratio for child branches (70% of parent)
+export const CHILD_WIDTH_RATIO = 0.65;       // Width ratio for child branches (60% of parent)
+export const BRANCH_TOP_WIDTH_RATIO = 0.6;  // Width ratio for branch top (50% of base width)
 
 // Branch spawn points
 export const BRANCH_MIN_SPAWN_HEIGHT = 0.4;  // Minimum height for branch spawning (30% of parent length)

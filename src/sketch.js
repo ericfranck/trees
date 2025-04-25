@@ -39,9 +39,6 @@ let lastSpawnTime = 0;
 let isPaused = false;
 let lastUpdateTime = performance.now() / 1000; // Store in seconds
 
-// Constants for time-based movement
-const PIXELS_PER_SECOND = 45; // Approximately matches original speed
-
 // FPS tracking
 let fpsBuffer = [];
 const FPS_BUFFER_SIZE = 30;
@@ -175,8 +172,8 @@ function update() {
     const deltaTime = Math.min(currentTime - lastUpdateTime, 0.1); // Cap at 100ms
     lastUpdateTime = currentTime;
     
-    // Update scroll position using delta time
-    const scrollDistance = PIXELS_PER_SECOND * deltaTime;
+    // Update scroll position using delta time and scene speed
+    const scrollDistance = SCENE_SPEED * deltaTime;
     scrollX += scrollDistance;
     worldContainer.x = -scrollX;
     updateScrollX(scrollX);

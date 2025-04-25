@@ -30,7 +30,11 @@ import {
     LEAF_MAX_GROWTH,
     LEAF_GROWTH_RATE,
     COLOR_VARIATION_RANGE,
-    LEAF_ANGLE_RANGE
+    LEAF_ANGLE_RANGE,
+    CHILD_LENGTH_MIN_RATIO,
+    CHILD_LENGTH_MAX_RATIO,
+    CHILD_WIDTH_RATIO,
+    BRANCH_TOP_WIDTH_RATIO
 } from '../utils/constants.js';
 import { random, floor, constrain, PI, adjustColor } from '../utils/math.js';
 
@@ -149,8 +153,8 @@ class Branch {
     }
 
     addChild(relativeHeight, isEndPoint) {
-        const childLength = this.length * random(0.4, 0.7);
-        const childWidth = this.width * 0.6;
+        const childLength = this.length * random(CHILD_LENGTH_MIN_RATIO, CHILD_LENGTH_MAX_RATIO);
+        const childWidth = this.width * CHILD_WIDTH_RATIO;
         
         // Adjust angle range based on whether this is an end point branch
         const angleRange = isEndPoint ? BRANCH_END_ANGLE_RANGE : BRANCH_SIDE_ANGLE_RANGE;
@@ -301,7 +305,7 @@ class Branch {
 
             let currentLength = this.length * this.growth;
             let currentWidth = this.width * this.growth;
-            let topWidth = currentWidth * 0.5;
+            let topWidth = currentWidth * BRANCH_TOP_WIDTH_RATIO;
             
             // Calculate end point
             const endX = currentX + Math.sin(currentAngle) * currentLength;

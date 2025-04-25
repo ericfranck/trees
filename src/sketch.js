@@ -283,20 +283,10 @@ function drawDebugInfo() {
                     );
                 }
             } else {
-                // Container - Green marker
+                // Container - Green marker (just the vertical line, no rectangle)
                 debugGraphics.lineStyle(2, 0x00FF00);
                 debugGraphics.moveTo(screenX, 30);
                 debugGraphics.lineTo(screenX, 40);
-                
-                // Draw container bounds
-                const containerBounds = tree.container.getBounds();
-                debugGraphics.lineStyle(1, 0x00FF00, 0.5);
-                debugGraphics.drawRect(
-                    containerBounds.x - scrollX,
-                    containerBounds.y,
-                    containerBounds.width,
-                    containerBounds.height
-                );
             }
             
             // Add position text

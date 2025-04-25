@@ -60,11 +60,7 @@ class Tree {
 
     isFullyGrown() {
         // Check if the root branch and all its children are fully grown
-        const isGrown = this.root.isFullyGrown();
-        if (isGrown) {
-            console.log(`[Tree ${this.id}] Tree is fully grown`);
-        }
-        return isGrown;
+        return this.root.isFullyGrown();
     }
     
     convertToSprite() {
@@ -72,7 +68,6 @@ class Tree {
         
         // Verify we have a valid app reference
         if (!this.app || !this.app.renderer) {
-            console.error(`[Tree ${this.id}] Cannot convert to sprite: missing app reference`);
             return;
         }
         
@@ -81,7 +76,6 @@ class Tree {
         const originalIndex = originalParent ? originalParent.getChildIndex(this.container) : 0;
         
         if (!originalParent) {
-            console.error(`[Tree ${this.id}] Container has no parent before conversion`);
             return;
         }
 
@@ -120,7 +114,6 @@ class Tree {
         try {
             this.app.renderer.render(tempContainer, { renderTexture });
         } catch (error) {
-            console.error(`[Tree ${this.id}] Error rendering to texture:`, error);
             // Restore container to original parent
             tempContainer.removeChild(this.container);
             originalParent.addChildAt(this.container, originalIndex);
@@ -152,42 +145,11 @@ class Tree {
     update(deltaTime) {
         // Only update if not converted to sprite
         if (this.isConvertedToSprite) {
-            if (this.sprite) {
-                const worldPos = this.sprite.position;
-                const screenPos = {
-                    x: worldPos.x - scrollX,
-                    y: worldPos.y
-                };
-                console.log(`[Tree ${this.id}] Sprite positions:`, {
-                    world: { x: worldPos.x, y: worldPos.y },
-                    screen: screenPos,
-                    scrollX,
-                    parent: this.sprite.parent ? 'yes' : 'no',
-                    visible: this.sprite.visible,
-                    alpha: this.sprite.alpha
-                });
-            }
             return;
         }
         
-        // Log container position
-        const containerWorldPos = this.container.position;
-        const containerScreenPos = {
-            x: containerWorldPos.x - scrollX,
-            y: containerWorldPos.y
-        };
-        console.log(`[Tree ${this.id}] Container positions:`, {
-            world: { x: containerWorldPos.x, y: containerWorldPos.y },
-            screen: containerScreenPos,
-            scrollX,
-            parent: this.container.parent ? 'yes' : 'no',
-            visible: this.container.visible,
-            alpha: this.container.alpha
-        });
-        
         // Only start growing if we've passed the trigger point
         if (!this.hasStartedGrowing && this.isPastGrowthTrigger()) {
-            console.log(`[Tree ${this.id}] Starting to grow`);
             this.startGrowing();
         }
         
@@ -195,7 +157,6 @@ class Tree {
         
         // Check if tree is fully grown and convert to sprite if it is
         if (this.isFullyGrown()) {
-            console.log(`[Tree ${this.id}] Converting to sprite`);
             this.convertToSprite();
         }
     }

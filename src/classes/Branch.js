@@ -18,6 +18,8 @@ import {
     BRANCH_END_ANGLE_RANGE,
     BRANCH_MIN_SPAWN_HEIGHT,
     BRANCH_MAX_SPAWN_HEIGHT,
+    TRUNK_MIN_SPAWN_HEIGHT,
+    TRUNK_MAX_SPAWN_HEIGHT,
     BRANCH_SPAWN_RANDOM_OFFSET,
     TRUNK_MIN_BRANCHES,
     TRUNK_MAX_BRANCHES,
@@ -31,8 +33,10 @@ import {
     LEAF_GROWTH_RATE,
     COLOR_VARIATION_RANGE,
     LEAF_ANGLE_RANGE,
-    CHILD_LENGTH_MIN_RATIO,
-    CHILD_LENGTH_MAX_RATIO,
+    TRUNK_CHILD_LENGTH_MIN_RATIO,
+    TRUNK_CHILD_LENGTH_MAX_RATIO,
+    BRANCH_CHILD_LENGTH_MIN_RATIO,
+    BRANCH_CHILD_LENGTH_MAX_RATIO,
     CHILD_WIDTH_RATIO,
     BRANCH_TOP_WIDTH_RATIO
 } from '../utils/constants.js';
@@ -87,7 +91,7 @@ class Branch {
         // Generate child spawn points
         this.childSpawnPoints = [];
         
-        // First, add a spawn point at the end of the branch
+        // First, add a spawn point at the end of the branch (always at 100%)
         this.childSpawnPoints.push({
             relativeHeight: 1.0,
             triggered: false,
@@ -97,12 +101,16 @@ class Branch {
         // Then distribute remaining spawn points along the branch
         const remainingChildren = this.maxChildren - 1;
         for (let i = 0; i < remainingChildren; i++) {
-            const baseHeight = BRANCH_MIN_SPAWN_HEIGHT + 
-                             (BRANCH_MAX_SPAWN_HEIGHT - BRANCH_MIN_SPAWN_HEIGHT) * 
+            // Use trunk-specific spawn heights for level 0, otherwise use regular branch heights
+            const minHeight = this.level === 0 ? TRUNK_MIN_SPAWN_HEIGHT : BRANCH_MIN_SPAWN_HEIGHT;
+            const maxHeight = this.level === 0 ? TRUNK_MAX_SPAWN_HEIGHT : BRANCH_MAX_SPAWN_HEIGHT;
+            
+            const baseHeight = minHeight + 
+                             (maxHeight - minHeight) * 
                              i / (remainingChildren - 1 || 1);
             const randomOffset = random(-BRANCH_SPAWN_RANDOM_OFFSET, BRANCH_SPAWN_RANDOM_OFFSET);
             this.childSpawnPoints.push({
-                relativeHeight: constrain(baseHeight + randomOffset, BRANCH_MIN_SPAWN_HEIGHT, BRANCH_MAX_SPAWN_HEIGHT),
+                relativeHeight: constrain(baseHeight + randomOffset, minHeight, maxHeight),
                 triggered: false,
                 isEndPoint: false
             });
@@ -153,7 +161,10 @@ class Branch {
     }
 
     addChild(relativeHeight, isEndPoint) {
-        const childLength = this.length * random(CHILD_LENGTH_MIN_RATIO, CHILD_LENGTH_MAX_RATIO);
+        // Use different length ratios for trunk branches vs regular branches
+        const minRatio = this.level === 0 ? TRUNK_CHILD_LENGTH_MIN_RATIO : BRANCH_CHILD_LENGTH_MIN_RATIO;
+        const maxRatio = this.level === 0 ? TRUNK_CHILD_LENGTH_MAX_RATIO : BRANCH_CHILD_LENGTH_MAX_RATIO;
+        const childLength = this.length * random(minRatio, maxRatio);
         const childWidth = this.width * CHILD_WIDTH_RATIO;
         
         // Adjust angle range based on whether this is an end point branch
@@ -177,7 +188,7 @@ class Branch {
             
             this.childBranches.push({
                 branch: child,
-                creationTime: performance.now() / 1000 // Store in seconds
+                creationTime: performance.now() / 1000
             });
             
             this.children.push(child);
